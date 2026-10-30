@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / ambient files
+__pycache__/
+*.py[cod]
+*$py.class
+*.bak
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.synctex.gz

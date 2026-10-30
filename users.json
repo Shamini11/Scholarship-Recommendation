@@ -1,0 +1,30 @@
+{
+  "student@example.com": {
+    "name": "Shamini K",
+    "phone": "9876543210",
+    "email": "student@example.com",
+    "password_hash": "9cc184ccd4b89981b89d341af0670f40f7f8893b517c5d098047354fd02585ad",
+    "created_at": "2026-10-29T16:32:33.085728"
+  },
+  "john.doe@example.com": {
+    "name": "John Doe",
+    "phone": "9876543211",
+    "email": "john.doe@example.com",
+    "password_hash": "8151f8e4edaffa105f0a6bb20ba9291d1be0257d8e093bf10a1cf19082feba27",
+    "created_at": "2026-10-29T16:32:33.107021"
+  },
+  "test.scholar@example.com": {
+    "name": "Priya Sharma",
+    "phone": "9876543210",
+    "email": "test.scholar@example.com",
+    "password_hash": "1de067233a5608081b9f017d68421faec3003d7dd93661f7e93f4a2fb0b067e2",
+    "created_at": "2026-10-29T16:35:57.931754"
+  },
+  "shamini@example.com": {
+    "name": "Shamini",
+    "phone": "9876543210",
+    "email": "shamini@example.com",
+    "password_hash": "f0c49ca159dcedf46b7655b01bb6ac94a00faf0d3a43769803dc8152dbf7c7af",
+    "created_at": "2026-10-29T16:47:28.196639"
+  }
+}
