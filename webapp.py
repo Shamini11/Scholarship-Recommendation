@@ -572,38 +572,27 @@ if 'model_name' not in st.session_state:
 if 'active_tab_right' not in st.session_state:
     st.session_state.active_tab_right = "matches"
 
+if 'student_background_input' not in st.session_state:
+    st.session_state.student_background_input = ""
+
+if 'voice_toast_msg' not in st.session_state:
+    st.session_state.voice_toast_msg = None
+
 
 # =============================================================================
-# 5. HANDLE INCOMING VOICE DICTATION VIA QUERY PARAMETER
+# 5. HANDLE INCOMING VOICE DICTATION VIA QUERY PARAMETER (AUTO-FILL INPUT)
 # =============================================================================
-if "voice_prompt" in st.query_params:
-    voice_input_val = st.query_params.get("voice_prompt", "")
+if "voice_transcript" in st.query_params or "voice_prompt" in st.query_params:
+    raw_voice_val = st.query_params.get("voice_transcript") or st.query_params.get("voice_prompt", "")
     st.query_params.clear()
     
-    if voice_input_val and voice_input_val.strip():
-        text_received = voice_input_val.strip()
-        st.session_state.chat_messages.append({"role": "user", "content": f"🎙️ {text_received}"})
-
-        user_name = st.session_state.current_user.get("name", "Student") if st.session_state.current_user else "Student"
-        extractor = GeminiNLPExtractor(
-            api_key=st.session_state.gemini_api_key,
-            model_name=st.session_state.model_name
-        )
-        extracted_dict, status_msg, ai_reply = extractor.extract_with_gemini(
-            text=text_received,
-            current_profile=st.session_state.user_profile,
-            user_name=user_name,
-            timeout_sec=1.0  # High-speed processing (< 1.0s)
-        )
-
-        updated_prof, _ = CumulativeProfileManager.merge(
-            current_profile=st.session_state.user_profile,
-            new_attributes=extracted_dict
-        )
-        st.session_state.user_profile = updated_prof
-        st.session_state.chat_messages.append({"role": "assistant", "content": ai_reply})
-        st.session_state.active_tab_right = "matches"
-        st.rerun()
+    if raw_voice_val and str(raw_voice_val).strip():
+        text_received = urllib.parse.unquote(str(raw_voice_val)).strip()
+        if text_received:
+            # Auto-fill directly into text input session state and notify user
+            st.session_state.student_background_input = text_received
+            st.session_state.voice_toast_msg = text_received
+            st.rerun()
 
 
 # =============================================================================
@@ -782,104 +771,337 @@ with col_left:
             with st.chat_message(msg["role"], avatar="🎓" if msg["role"] == "assistant" else "👤"):
                 st.markdown(msg["content"])
 
-    # Voice Dictation Widget
-    voice_component_html = """
-    <div style="font-family: 'Inter', -apple-system, sans-serif; background: #FFFFFF; border: 1px solid #E2E7ED; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.02);">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <button id="q-rec-btn" onclick="toggleVoiceDictation()" style="background: #FFFFFF; color: #355E85; border: 1.5px solid #52769B; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.15s ease-in-out; font-family: 'Inter', sans-serif;">
-                🎙️ Start Voice Dictation
-            </button>
-            <span id="q-rec-status" style="font-size: 0.82rem; color: #687586; font-weight: 500;">Click to speak into microphone</span>
+    # Voice Dictation Toast Notification
+    if st.session_state.get("voice_toast_msg"):
+        st.markdown(f"""
+        <div style="background-color: #E2F3E8; border: 1px solid #C3E6D0; border-radius: 8px; padding: 0.55rem 0.85rem; margin-bottom: 0.65rem; font-size: 0.84rem; color: #246B45; display: flex; align-items: center; gap: 0.45rem;">
+            <span>✓</span>
+            <span><b>Voice Captured & Auto-Filled:</b> "{st.session_state.voice_toast_msg}"</span>
         </div>
-        <div id="q-live-txt" style="font-size: 0.82rem; color: #23364D; font-style: italic; max-width: 48%; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;"></div>
+        """, unsafe_allow_html=True)
+        st.session_state.voice_toast_msg = None
+
+    # Modern Web Speech API Voice Dictation Component
+    voice_component_html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: transparent;
+            color: #263238;
+            overflow: hidden;
+        }
+        .voice-card {
+            background: #FFFFFF;
+            border: 1px solid #E2E7ED;
+            border-radius: 9px;
+            padding: 8px 12px;
+            box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .voice-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .voice-action-btn {
+            background-color: #FFFFFF;
+            color: #355E85;
+            border: 1.5px solid #52769B;
+            border-radius: 7px;
+            padding: 6px 14px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.84rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease-in-out;
+            white-space: nowrap;
+        }
+        .voice-action-btn:hover {
+            background-color: #F7F8FA;
+            border-color: #355E85;
+            color: #23364D;
+        }
+        .voice-action-btn.recording {
+            background-color: #FCE8E8 !important;
+            border-color: #A83232 !important;
+            color: #A83232 !important;
+            box-shadow: 0 0 0 3px rgba(168, 50, 50, 0.12);
+        }
+        .voice-action-btn.processing {
+            background-color: #FFF2D5 !important;
+            border-color: #8A5A00 !important;
+            color: #8A5A00 !important;
+        }
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.81rem;
+            color: #687586;
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #94A3B8;
+            display: inline-block;
+            flex-shrink: 0;
+            transition: all 0.2s ease;
+        }
+        .pulse-dot.listening {
+            background-color: #A83232;
+            box-shadow: 0 0 6px rgba(168, 50, 50, 0.7);
+            animation: pulseWave 1.1s infinite ease-in-out;
+        }
+        .pulse-dot.processing {
+            background-color: #8A5A00;
+            animation: pulseWave 0.7s infinite ease-in-out;
+        }
+        .pulse-dot.success {
+            background-color: #246B45;
+            box-shadow: 0 0 6px rgba(36, 107, 69, 0.5);
+        }
+        @keyframes pulseWave {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.35); opacity: 0.4; }
+        }
+        .live-preview {
+            font-size: 0.80rem;
+            color: #23364D;
+            background-color: #F7F8FA;
+            border: 1px dashed #D0DFEE;
+            border-radius: 6px;
+            padding: 4px 8px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-style: italic;
+        }
+        .live-badge {
+            font-style: normal;
+            font-weight: 700;
+            color: #355E85;
+            font-size: 0.73rem;
+            margin-right: 4px;
+        }
+        .error-msg {
+            font-size: 0.78rem;
+            color: #A83232;
+            background-color: #FCE8E8;
+            border-radius: 5px;
+            padding: 4px 8px;
+        }
+    </style>
+    </head>
+    <body>
+    <div class="voice-card">
+        <div class="voice-bar">
+            <button id="q-mic-btn" class="voice-action-btn" onclick="toggleDictation()">
+                <span id="q-mic-icon">🎙️</span>
+                <span id="q-mic-txt">Start Voice Dictation</span>
+            </button>
+            <div class="status-pill">
+                <span id="q-pulse-dot" class="pulse-dot"></span>
+                <span id="q-status-msg">Click microphone to speak (English)</span>
+            </div>
+        </div>
+        <div id="q-preview-box" class="live-preview" style="display: none;">
+            <span class="live-badge">LIVE TRANSCRIPT:</span>
+            <span id="q-preview-txt">Listening...</span>
+        </div>
+        <div id="q-err-banner" class="error-msg" style="display: none;"></div>
     </div>
 
     <script>
-        let q_sr = null;
-        let q_recording = false;
-        let q_gathered = '';
+        let recognizer = null;
+        let isRecording = false;
+        let finalOutput = '';
 
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechClass = window.SpeechRecognition || window.webkitSpeechRecognition;
-            q_sr = new SpeechClass();
-            q_sr.continuous = true;
-            q_sr.interimResults = true;
-            q_sr.lang = 'en-IN';
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-            q_sr.onstart = function() {
-                q_recording = true;
-                q_gathered = '';
-                const btn = document.getElementById('q-rec-btn');
-                btn.style.background = '#FCE8E8';
-                btn.style.color = '#A83232';
-                btn.style.border = '1.5px solid #A83232';
-                btn.innerHTML = '⏹️ Stop & Process';
-                document.getElementById('q-rec-status').innerHTML = '<span style="color: #A83232; font-weight: 600;">🔴 Listening... Click "Stop & Process"</span>';
+        if (SpeechRec) {
+            recognizer = new SpeechRec();
+            // Requirement 1: accurate local configuration
+            recognizer.continuous = false;      // Concludes cleanly after speaking
+            recognizer.interimResults = true;   // Live transcription feedback
+            recognizer.lang = 'en-IN';          // Optimized for Indian English & academic terms
+            recognizer.maxAlternatives = 1;
+
+            recognizer.onstart = function() {
+                isRecording = true;
+                finalOutput = '';
+                document.getElementById('q-err-banner').style.display = 'none';
+                document.getElementById('q-preview-box').style.display = 'block';
+                document.getElementById('q-preview-txt').innerText = 'Listening for speech...';
+
+                const btn = document.getElementById('q-mic-btn');
+                btn.className = 'voice-action-btn recording';
+                document.getElementById('q-mic-icon').innerText = '⏹️';
+                document.getElementById('q-mic-txt').innerText = 'Stop & Auto-Fill';
+
+                const dot = document.getElementById('q-pulse-dot');
+                dot.className = 'pulse-dot listening';
+                document.getElementById('q-status-msg').innerHTML = '<span style="color: #A83232; font-weight: 600;">🎙️ Listening... Speak now</span>';
             };
 
-            q_sr.onresult = function(e) {
+            recognizer.onresult = function(event) {
                 let interim = '';
-                for (let i = e.resultIndex; i < e.results.length; ++i) {
-                    if (e.results[i].isFinal) {
-                        q_gathered += e.results[i][0].transcript + ' ';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    const item = event.results[i];
+                    if (item.isFinal) {
+                        finalOutput += item[0].transcript + ' ';
                     } else {
-                        interim += e.results[i][0].transcript;
+                        interim += item[0].transcript;
                     }
                 }
-                document.getElementById('q-live-txt').innerText = '"' + (q_gathered + interim).trim() + '"';
+                const liveText = (finalOutput + interim).trim();
+                if (liveText.length > 0) {
+                    document.getElementById('q-preview-txt').innerText = '"' + liveText + '"';
+                    // Requirement 2: Immediate DOM auto-fill into parent Streamlit textarea
+                    injectIntoParentTextarea(liveText);
+                }
             };
 
-            q_sr.onerror = function(err) {
-                resetVoiceDictation();
-                document.getElementById('q-rec-status').innerText = 'Microphone notice: ' + err.error;
+            recognizer.onerror = function(event) {
+                isRecording = false;
+                resetButtonState();
+
+                let message = 'Microphone notice: ' + event.error;
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    message = '⚠️ Microphone permission denied. Please allow microphone access in your browser address bar.';
+                } else if (event.error === 'no-speech') {
+                    message = 'ℹ️ No speech was heard. Click the button and speak into your microphone.';
+                } else if (event.error === 'network') {
+                    message = '⚠️ Speech recognition network connection notice. Please retry.';
+                }
+
+                const errEl = document.getElementById('q-err-banner');
+                errEl.innerText = message;
+                errEl.style.display = 'block';
+                document.getElementById('q-status-msg').innerText = 'Microphone ready';
             };
 
-            q_sr.onend = function() {
-                if (q_recording) {
-                    try { q_sr.start(); } catch(err) {}
+            recognizer.onend = function() {
+                isRecording = false;
+                const capturedText = finalOutput.trim();
+
+                if (capturedText.length > 0) {
+                    // Update UI to success state
+                    const btn = document.getElementById('q-mic-btn');
+                    btn.className = 'voice-action-btn processing';
+                    document.getElementById('q-mic-icon').innerText = '⏳';
+                    document.getElementById('q-mic-txt').innerText = 'Auto-Filling...';
+
+                    const dot = document.getElementById('q-pulse-dot');
+                    dot.className = 'pulse-dot success';
+                    document.getElementById('q-status-msg').innerHTML = '<span style="color: #246B45; font-weight: 600;">✓ Transcript captured!</span>';
+
+                    // 1. Direct DOM injection into Streamlit's textarea
+                    injectIntoParentTextarea(capturedText);
+
+                    // 2. Seamless Streamlit Rerun via query parameter to update session state
+                    setTimeout(function() {
+                        try {
+                            const parentUrl = new URL(window.parent.location.href);
+                            parentUrl.searchParams.set('voice_transcript', encodeURIComponent(capturedText));
+                            window.parent.location.href = parentUrl.toString();
+                        } catch(e) {
+                            console.error('State sync error:', e);
+                            resetButtonState();
+                        }
+                    }, 350);
+                } else {
+                    resetButtonState();
                 }
             };
         } else {
-            document.getElementById('q-rec-status').innerText = 'Web Speech not supported in this browser. Please type below.';
-            document.getElementById('q-rec-btn').disabled = true;
+            const btn = document.getElementById('q-mic-btn');
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+            const errEl = document.getElementById('q-err-banner');
+            errEl.innerText = '⚠️ Web Speech API is not supported in this browser. Please use Chrome, Edge, or Safari.';
+            errEl.style.display = 'block';
         }
 
-        function toggleVoiceDictation() {
-            if (!q_sr) return;
-            if (!q_recording) {
-                try { q_sr.start(); } catch(e) {}
+        function toggleDictation() {
+            if (!recognizer) return;
+            if (!isRecording) {
+                try {
+                    recognizer.start();
+                } catch(e) {
+                    console.warn(e);
+                }
             } else {
-                q_recording = false;
-                try { q_sr.stop(); } catch(e) {}
-                const finalTxt = (q_gathered || document.getElementById('q-live-txt').innerText.replace(/"/g, '')).trim();
-                resetVoiceDictation();
-                if (finalTxt.length > 0) {
-                    const u = new URL(window.parent.location.href);
-                    u.searchParams.set('voice_prompt', finalTxt);
-                    window.parent.location.href = u.toString();
+                isRecording = false;
+                try {
+                    recognizer.stop();
+                } catch(e) {
+                    console.warn(e);
                 }
             }
         }
 
-        function resetVoiceDictation() {
-            q_recording = false;
-            const btn = document.getElementById('q-rec-btn');
-            btn.style.background = '#FFFFFF';
-            btn.style.color = '#355E85';
-            btn.style.border = '1.5px solid #52769B';
-            btn.innerHTML = '🎙️ Start Voice Dictation';
+        function resetButtonState() {
+            isRecording = false;
+            const btn = document.getElementById('q-mic-btn');
+            btn.className = 'voice-action-btn';
+            document.getElementById('q-mic-icon').innerText = '🎙️';
+            document.getElementById('q-mic-txt').innerText = 'Start Voice Dictation';
+
+            const dot = document.getElementById('q-pulse-dot');
+            dot.className = 'pulse-dot';
+            document.getElementById('q-status-msg').innerText = 'Click microphone to speak';
+        }
+
+        function injectIntoParentTextarea(text) {
+            try {
+                const parentDoc = window.parent.document;
+                const textareas = parentDoc.querySelectorAll('textarea');
+                textareas.forEach(function(ta) {
+                    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                    if (nativeSetter) {
+                        nativeSetter.call(ta, text);
+                    } else {
+                        ta.value = text;
+                    }
+                    ta.dispatchEvent(new Event('input', { bubbles: true }));
+                    ta.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            } catch(err) {
+                console.warn('DOM auto-fill notice:', err);
+            }
         }
     </script>
+    </body>
+    </html>
     """
-    components.html(voice_component_html, height=52)
+    components.html(voice_component_html, height=72)
 
-    # Text Input Form
-    with st.form("student_input_form", clear_on_submit=True):
+    # Text Input Form (with automatic session state binding)
+    with st.form("student_input_form", clear_on_submit=False):
         user_text_input = st.text_area(
             label="Share your background",
             placeholder="I'm an undergraduate student in Tamil Nadu. Here are my academic details, family income, and other relevant information...",
-            height=90,
-            label_visibility="collapsed"
+            height=95,
+            label_visibility="collapsed",
+            key="student_background_input"
         )
         st.markdown("<div style='font-size: 0.82rem; color: #687586; margin-bottom: 0.75rem;'>💡 Include your degree (UG/PG), community (BC/MBC/SC/ST/General), annual family income, marks or CGPA.</div>", unsafe_allow_html=True)
         send_clicked = st.form_submit_button("Find My Scholarships", type="primary", use_container_width=True)
@@ -907,6 +1129,8 @@ with col_left:
                 st.session_state.user_profile = updated_prof
                 st.session_state.chat_messages.append({"role": "assistant", "content": ai_reply})
                 st.session_state.active_tab_right = "matches"
+                # Clear text area after submission
+                st.session_state.student_background_input = ""
             st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -969,6 +1193,8 @@ with col_left:
     if st.button("🔄 Reset Profile State", type="secondary", use_container_width=True):
         st.session_state.user_profile = CumulativeProfileManager.get_initial_profile()
         st.session_state.chat_messages = []
+        st.session_state.student_background_input = ""
+        st.session_state.voice_toast_msg = None
         st.session_state.active_tab_right = "matches"
         st.rerun()
 
