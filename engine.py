@@ -42,7 +42,12 @@ class ScholarshipDataLoader:
 
     def load_data(self) -> pd.DataFrame:
         if not os.path.exists(self.excel_path):
-            raise FileNotFoundError(f"Scholarship dataset file not found at: {self.excel_path}")
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            candidate = os.path.join(base_dir, self.excel_path)
+            if os.path.exists(candidate):
+                self.excel_path = candidate
+            else:
+                raise FileNotFoundError(f"Scholarship dataset file not found at: {self.excel_path}")
         
         df = pd.read_excel(self.excel_path, sheet_name=self.sheet_name)
         

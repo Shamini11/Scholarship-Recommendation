@@ -87,6 +87,24 @@ Open your browser at `http://localhost:8501`.
 
 ---
 
+## 🌐 Deploy to Render
+
+This repository includes `render.yaml`, `Procfile`, and `.streamlit/config.toml` configured for instant deployment on [Render](https://render.com).
+
+### Quick Steps:
+1. Log in to [Render Dashboard](https://dashboard.render.com).
+2. Click **New +** → **Web Service**.
+3. Connect your GitHub repository: `Shamini11/Scholarship-Recommendation`.
+4. Configure service settings:
+   - **Environment**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `streamlit run webapp.py --server.port $PORT --server.address 0.0.0.0`
+5. *(Optional)* Under **Environment Variables**, add:
+   - `GEMINI_API_KEY`: *(Your Google Gemini API Key)*
+6. Click **Deploy Web Service**. Render will build and deploy your app with a public `https://*.onrender.com` URL!
+
+---
+
 ## 🧪 Testing
 
 Run the automated unit test suite:

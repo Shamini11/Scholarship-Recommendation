@@ -14,7 +14,8 @@ import hashlib
 from datetime import datetime
 from typing import Tuple, Optional, Dict, Any
 
-USERS_FILE = "users.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+USERS_FILE = os.path.join(BASE_DIR, "users.json")
 
 def _hash_password(password: str, salt: str = "scholarship_app_salt_2026") -> str:
     """Hashes a password with salt using SHA-256."""
