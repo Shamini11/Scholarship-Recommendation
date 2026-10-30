@@ -241,8 +241,14 @@ st.markdown("""
     }
 
     /* Buttons */
-    div.stButton > button[kind="primary"], div.stButton > button[data-testid="baseButton-primary"], .stLinkButton a {
+    div.stButton > button[kind="primary"],
+    div.stButton > button[data-testid="baseButton-primary"],
+    div[data-testid="stFormSubmitButton"] > button,
+    div[data-testid="stFormSubmitButton"] button,
+    button[data-testid="baseButton-primaryFormSubmit"],
+    .stLinkButton a {
         background-color: #355E85 !important;
+        background: #355E85 !important;
         color: #FFFFFF !important;
         border: 1px solid #355E85 !important;
         border-radius: 8px !important;
@@ -253,8 +259,14 @@ st.markdown("""
         transition: all 0.15s ease-in-out !important;
         text-decoration: none !important;
     }
-    div.stButton > button[kind="primary"]:hover, div.stButton > button[data-testid="baseButton-primary"]:hover, .stLinkButton a:hover {
+    div.stButton > button[kind="primary"]:hover,
+    div.stButton > button[data-testid="baseButton-primary"]:hover,
+    div[data-testid="stFormSubmitButton"] > button:hover,
+    div[data-testid="stFormSubmitButton"] button:hover,
+    button[data-testid="baseButton-primaryFormSubmit"]:hover,
+    .stLinkButton a:hover {
         background-color: #2B4E6F !important;
+        background: #2B4E6F !important;
         border-color: #2B4E6F !important;
         color: #FFFFFF !important;
         box-shadow: 0 2px 4px rgba(16, 24, 40, 0.08) !important;
@@ -572,8 +584,11 @@ if 'model_name' not in st.session_state:
 if 'active_tab_right' not in st.session_state:
     st.session_state.active_tab_right = "matches"
 
-if 'student_background_input' not in st.session_state:
-    st.session_state.student_background_input = ""
+if 'input_key_counter' not in st.session_state:
+    st.session_state.input_key_counter = 0
+
+if 'voice_prefill' not in st.session_state:
+    st.session_state.voice_prefill = ""
 
 if 'voice_toast_msg' not in st.session_state:
     st.session_state.voice_toast_msg = None
@@ -589,9 +604,10 @@ if "voice_transcript" in st.query_params or "voice_prompt" in st.query_params:
     if raw_voice_val and str(raw_voice_val).strip():
         text_received = urllib.parse.unquote(str(raw_voice_val)).strip()
         if text_received:
-            # Auto-fill directly into text input session state and notify user
-            st.session_state.student_background_input = text_received
+            # Prefill speech into text input and advance counter for a fresh bound widget
+            st.session_state.voice_prefill = text_received
             st.session_state.voice_toast_msg = text_received
+            st.session_state.input_key_counter += 1
             st.rerun()
 
 
@@ -740,6 +756,9 @@ with col_dash_act:
         st.session_state.current_user = None
         st.session_state.user_profile = CumulativeProfileManager.get_initial_profile()
         st.session_state.chat_messages = []
+        st.session_state.voice_prefill = ""
+        st.session_state.input_key_counter += 1
+        st.session_state.voice_toast_msg = None
         st.session_state.active_tab_right = "matches"
         st.rerun()
 
@@ -1095,13 +1114,15 @@ with col_left:
     components.html(voice_component_html, height=72)
 
     # Text Input Form (with automatic session state binding)
+    input_widget_key = f"student_input_{st.session_state.input_key_counter}"
     with st.form("student_input_form", clear_on_submit=False):
         user_text_input = st.text_area(
             label="Share your background",
+            value=st.session_state.voice_prefill,
             placeholder="I'm an undergraduate student in Tamil Nadu. Here are my academic details, family income, and other relevant information...",
             height=95,
             label_visibility="collapsed",
-            key="student_background_input"
+            key=input_widget_key
         )
         st.markdown("<div style='font-size: 0.82rem; color: #687586; margin-bottom: 0.75rem;'>💡 Include your degree (UG/PG), community (BC/MBC/SC/ST/General), annual family income, marks or CGPA.</div>", unsafe_allow_html=True)
         send_clicked = st.form_submit_button("Find My Scholarships", type="primary", use_container_width=True)
@@ -1129,8 +1150,10 @@ with col_left:
                 st.session_state.user_profile = updated_prof
                 st.session_state.chat_messages.append({"role": "assistant", "content": ai_reply})
                 st.session_state.active_tab_right = "matches"
-                # Clear text area after submission
-                st.session_state.student_background_input = ""
+                
+                # Clear prefill and advance counter for fresh empty text area on next run
+                st.session_state.voice_prefill = ""
+                st.session_state.input_key_counter += 1
             st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1175,6 +1198,8 @@ with col_left:
     col_qp1, col_qp2 = st.columns(2)
     with col_qp1:
         if st.button("Sample: Female BC UG (85%)", type="secondary", use_container_width=True):
+            st.session_state.voice_prefill = ""
+            st.session_state.input_key_counter += 1
             st.session_state.chat_messages.append({"role": "user", "content": "I am a female BC student studying UG in Tamil Nadu with 85% marks."})
             ext = GeminiNLPExtractor().extract_with_gemini("I am a female BC student studying UG in Tamil Nadu with 85% marks.", prof, user['name'])
             st.session_state.user_profile, _ = CumulativeProfileManager.merge(prof, ext[0])
@@ -1183,6 +1208,8 @@ with col_left:
             st.rerun()
     with col_qp2:
         if st.button("Sample: Differently Abled", type="secondary", use_container_width=True):
+            st.session_state.voice_prefill = ""
+            st.session_state.input_key_counter += 1
             st.session_state.chat_messages.append({"role": "user", "content": "I am a UG student in Tamil Nadu with a walking disability."})
             ext = GeminiNLPExtractor().extract_with_gemini("I am a UG student in Tamil Nadu with a walking disability.", prof, user['name'])
             st.session_state.user_profile, _ = CumulativeProfileManager.merge(prof, ext[0])
@@ -1193,7 +1220,8 @@ with col_left:
     if st.button("🔄 Reset Profile State", type="secondary", use_container_width=True):
         st.session_state.user_profile = CumulativeProfileManager.get_initial_profile()
         st.session_state.chat_messages = []
-        st.session_state.student_background_input = ""
+        st.session_state.voice_prefill = ""
+        st.session_state.input_key_counter += 1
         st.session_state.voice_toast_msg = None
         st.session_state.active_tab_right = "matches"
         st.rerun()
